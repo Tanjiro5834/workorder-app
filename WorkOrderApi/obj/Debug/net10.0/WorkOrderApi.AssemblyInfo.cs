@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("WorkOrderApi")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3b4c8ee7416bd542cbe2650155e042fa6bb82d51")]
 [assembly: System.Reflection.AssemblyProductAttribute("WorkOrderApi")]
 [assembly: System.Reflection.AssemblyTitleAttribute("WorkOrderApi")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -136,3 +136,4 @@ C:\Users\Lenovo\Documents\All Programming Languages\Software Development Project
 C:\Users\Lenovo\Documents\All Programming Languages\Software Development Projects\Web Dev\workorder-app\WorkOrderApi\obj\Debug\net10.0\WorkOrderApi.pdb
 C:\Users\Lenovo\Documents\All Programming Languages\Software Development Projects\Web Dev\workorder-app\WorkOrderApi\obj\Debug\net10.0\WorkOrderApi.genruntimeconfig.cache
 C:\Users\Lenovo\Documents\All Programming Languages\Software Development Projects\Web Dev\workorder-app\WorkOrderApi\obj\Debug\net10.0\ref\WorkOrderApi.dll
+C:\Users\Lenovo\Documents\All Programming Languages\Software Development Projects\Web Dev\workorder-app\WorkOrderApi\obj\Debug\net10.0\WorkOrderApi.sourcelink.json
