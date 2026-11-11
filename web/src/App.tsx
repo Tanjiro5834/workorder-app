@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { workOrdersApi, type PagedResult, type WorkOrder, type WorkOrderStatus } from './api/workOrders'
+import CreateWorkOrderForm from './components/CreateWorkOrderForm'
 
 const STATUSES: WorkOrderStatus[] = ['Open', 'InProgress', 'Done']
 
@@ -39,6 +40,15 @@ export default function App() {
     }
   }
 
+  function handleCreated() {
+    if (page !== 1 || status !== '') {
+      setStatus('')
+      setPage(1)
+    } else {
+      load()
+    }
+  }
+
   async function remove(id: number) {
     if (!window.confirm('Delete this work order?')) return
     try {
@@ -69,6 +79,8 @@ export default function App() {
           ))}
         </select>
       </header>
+
+      <CreateWorkOrderForm onCreated={handleCreated} />
 
       {error && <p className="error">{error}</p>}
 

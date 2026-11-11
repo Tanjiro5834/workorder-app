@@ -15,6 +15,8 @@ builder.Services.AddDbContext<AppDbContext>(o => o.UseSqlServer(builder.Configur
 
 builder.Services.AddScoped<IWorkOrderService, WorkOrderService>();
 
+builder.Services.AddScoped<IBranchService, BranchService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

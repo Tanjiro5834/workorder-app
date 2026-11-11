@@ -26,6 +26,37 @@ export interface CreateWorkOrder {
   branchId: number
 }
 
+export interface Branch {
+  id: number
+  name: string
+}
+
+export const branchesApi = {
+  list() {
+    return request<Branch[]>('/api/branches')
+  },
+}
+
+export class ApiError extends Error {
+  status: number
+  fieldErrors: Record<string, string[]>
+
+  constructor(message: string, status: number, fieldErrors: Record<string, string[]> = {}) {
+    super(message)
+    this.status = status
+    this.fieldErrors = fieldErrors
+  }
+}
+
+function normalizeErrors(errors: Record<string, string[]> | undefined) {
+  const result: Record<string, string[]> = {}
+  for (const [key, messages] of Object.entries(errors ?? {})) {
+    const field = key.charAt(0).toLowerCase() + key.slice(1)
+    result[field] = messages
+  }
+  return result
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
@@ -34,7 +65,11 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => null)
-    throw new Error(body?.error ?? body?.title ?? `Request failed (${res.status})`)
+    throw new ApiError(
+      body?.error ?? body?.title ?? `Request failed (${res.status})`,
+      res.status,
+      normalizeErrors(body?.errors),
+    )
   }
 
   return res.status === 204 ? (undefined as T) : res.json()
@@ -59,3 +94,4 @@ export const workOrdersApi = {
     return request<void>(`/api/work-orders/${id}`, { method: 'DELETE' })
   },
 }
+
