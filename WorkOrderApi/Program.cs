@@ -17,15 +17,26 @@ builder.Services.AddScoped<IWorkOrderService, WorkOrderService>();
 
 builder.Services.AddScoped<IBranchService, BranchService>();
 
-var app = builder.Build();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("VueFrontend", policy =>
+    {
+        policy
+            .WithOrigins("http://localhost:5173")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 
-// Configure the HTTP request pipeline.
+var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
 
 app.UseHttpsRedirection();
+
+app.UseCors("VueFrontend");
 
 app.UseAuthorization();
 
