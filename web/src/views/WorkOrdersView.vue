@@ -1,0 +1,638 @@
+
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import {
+    Plus,
+    Search,
+    RefreshCw,
+    ClipboardList,
+    X,
+    Eye
+} from 'lucide-vue-next'
+
+import { workOrderService } from '../services/workOrderService'
+import type {
+    WorkOrder,
+    Priority
+} from '../services/workOrderService'
+
+import { branchService } from '../services/branchService'
+import type { Branch } from '../services/branchService'
+
+const workOrders = ref<WorkOrder[]>([])
+const branches = ref<Branch[]>([])
+
+const loading = ref(false)
+const branchesLoading = ref(false)
+const submitting = ref(false)
+
+const error = ref('')
+const formError = ref('')
+
+const page = ref(1)
+const pageSize = 10
+const total = ref(0)
+
+const search = ref('')
+
+// Modal state
+const showModal = ref(false)
+const selectedWorkOrder = ref<WorkOrder | null>(null)
+const detailsLoading = ref(false)
+const detailsError = ref('')
+
+// Form state
+const form = ref({
+    title: '',
+    description: '',
+    priority: 'Medium' as Priority,
+    branchId: ''
+})
+
+const totalPages = computed(() =>
+    Math.max(1, Math.ceil(total.value / pageSize))
+)
+
+const filteredWorkOrders = computed(() => {
+    const keyword = search.value.trim().toLowerCase()
+
+    if (!keyword) return workOrders.value
+
+    return workOrders.value.filter(order =>
+        order.title.toLowerCase().includes(keyword) ||
+        order.branchName.toLowerCase().includes(keyword)
+    )
+})
+
+// Fetch work orders
+async function fetchWorkOrders() {
+    loading.value = true
+    error.value = ''
+
+    try {
+        const response = await workOrderService.getAll(
+            page.value,
+            pageSize
+        )
+
+        workOrders.value = response.data.items
+        total.value = response.data.total
+    } catch (err: any) {
+        console.error('API ERROR:', err)
+        console.error('STATUS:', err.response?.status)
+        console.error('RESPONSE:', err.response?.data)
+
+        error.value = 'Unable to load work orders.'
+    } finally {
+        loading.value = false
+    }
+}
+
+async function viewWorkOrder(id: number) {
+    selectedWorkOrder.value = null
+    detailsError.value = ''
+    detailsLoading.value = true
+
+    try {
+        const response = await workOrderService.getById(id)
+        selectedWorkOrder.value = response.data
+    } catch (err) {
+        console.error('Failed to load work order:', err)
+        detailsError.value = 'Unable to load work order details.'
+    } finally {
+        detailsLoading.value = false
+    }
+}
+
+// Fetch branches
+async function fetchBranches() {
+    branchesLoading.value = true
+
+    try {
+        const response = await branchService.getAll()
+        branches.value = response.data
+    } catch (err) {
+        console.error(err)
+        formError.value = 'Unable to load branches. Please try again.'
+    } finally {
+        branchesLoading.value = false
+    }
+}
+
+// Open modal
+async function openCreateModal() {
+    formError.value = ''
+    showModal.value = true
+
+    if (branches.value.length === 0) {
+        await fetchBranches()
+    }
+}
+
+// Close modal
+function closeCreateModal() {
+    if (submitting.value) return
+
+    showModal.value = false
+    formError.value = ''
+
+    resetForm()
+}
+
+// Reset form
+function resetForm() {
+    form.value = {
+        title: '',
+        description: '',
+        priority: 'Medium',
+        branchId: ''
+    }
+}
+
+// Create work order
+async function createWorkOrder() {
+    formError.value = ''
+
+    const title = form.value.title.trim()
+    const description = form.value.description.trim()
+
+    if (!title) {
+        formError.value = 'Work order title is required.'
+        return
+    }
+
+    if (title.length > 150) {
+        formError.value = 'Title cannot exceed 150 characters.'
+        return
+    }
+
+    if (description.length > 500) {
+        formError.value = 'Description cannot exceed 500 characters.'
+        return
+    }
+
+    if (!form.value.branchId) {
+        formError.value = 'Please select a branch.'
+        return
+    }
+
+    submitting.value = true
+
+    try {
+        await workOrderService.create({
+            title,
+            description: description || null,
+            priority: form.value.priority,
+            branchId: Number(form.value.branchId)
+        })
+
+        showModal.value = false
+        resetForm()
+
+        // Show the newest record on the first page.
+        page.value = 1
+        await fetchWorkOrders()
+
+    } catch (err: any) {
+        console.error(err)
+
+        formError.value =
+            err.response?.data?.error ||
+            'Failed to create work order. Please try again.'
+
+    } finally {
+        submitting.value = false
+    }
+}
+
+// Pagination
+function changePage(newPage: number) {
+    if (newPage < 1 || newPage > totalPages.value) return
+
+    page.value = newPage
+    fetchWorkOrders()
+}
+
+// Formatting
+function formatDate(date: string) {
+    return new Date(date).toLocaleDateString('en-PH', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+    })
+}
+
+function statusClass(status: string) {
+    const classes: Record<string, string> = {
+        Open: 'open',
+        InProgress: 'in-progress',
+        Done: 'done'
+    }
+
+    return classes[status] ?? ''
+}
+
+function priorityClass(priority: string) {
+    return priority.toLowerCase()
+}
+
+onMounted(() => {
+    fetchWorkOrders()
+})
+</script>
+
+<template>
+    <div class="work-orders-page">
+
+        <!-- Page Header -->
+        <div class="page-heading">
+            <div>
+                <h2>Work Orders</h2>
+                <p>Manage and monitor all work orders.</p>
+            </div>
+
+            <button
+                class="primary-button"
+                @click="openCreateModal"
+            >
+                <Plus :size="17" />
+                New Work Order
+            </button>
+        </div>
+
+        <!-- Work Orders Table -->
+        <div class="content-card">
+
+            <div class="table-toolbar">
+                <div class="search-box">
+                    <Search :size="17" />
+
+                    <input
+                        v-model="search"
+                        type="text"
+                        placeholder="Search title or branch..."
+                    />
+                </div>
+
+                <button
+                    class="secondary-button"
+                    @click="fetchWorkOrders"
+                    :disabled="loading"
+                >
+                    <RefreshCw :size="15" />
+                    Refresh
+                </button>
+            </div>
+
+            <div v-if="loading" class="table-message">
+                Loading work orders...
+            </div>
+
+            <div v-else-if="error" class="table-message error-message">
+                {{ error }}
+
+                <button class="text-link" @click="fetchWorkOrders">
+                    Try again
+                </button>
+            </div>
+
+            <div v-else-if="filteredWorkOrders.length === 0" class="table-message">
+                <ClipboardList :size="32" />
+                <strong>No work orders found</strong>
+                <span>No records match your search.</span>
+            </div>
+
+            <div v-else class="table-wrapper">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>WORK ORDER</th>
+                            <th>BRANCH</th>
+                            <th>PRIORITY</th>
+                            <th>STATUS</th>
+                            <th>DATE CREATED</th>
+                            <th>ACTIONS</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        <tr
+                            v-for="order in filteredWorkOrders"
+                            :key="order.id"
+                        >
+                            <td>
+                                <div class="order-title">
+                                    <strong>{{ order.title }}</strong>
+                                    <span>
+                                        WO-{{ String(order.id).padStart(4, '0') }}
+                                    </span>
+                                </div>
+                            </td>
+
+                            <td>{{ order.branchName }}</td>
+
+                            <td>
+                                <span
+                                    class="priority-badge"
+                                    :class="priorityClass(order.priority)"
+                                >
+                                    {{ order.priority }}
+                                </span>
+                            </td>
+
+                            <td>
+                                <span
+                                    class="status-badge"
+                                    :class="statusClass(order.status)"
+                                >
+                                    {{ order.status }}
+                                </span>
+                            </td>
+
+                            <td>{{ formatDate(order.createdAt) }}</td>
+
+                            <td>
+                                <button
+                                    class="icon-button"
+                                    title="View details"
+                                    @click="viewWorkOrder(order.id)"
+                                >
+                                    <Eye :size="16" />
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div
+                v-if="!loading && !error && total > 0"
+                class="table-footer"
+            >
+                <span>
+                    Showing {{ (page - 1) * pageSize + 1 }}–{{
+                        Math.min(page * pageSize, total)
+                    }} of {{ total }} work orders
+                </span>
+
+                <div class="pagination">
+                    <button
+                        class="page-button"
+                        :disabled="page === 1"
+                        @click="changePage(page - 1)"
+                    >
+                        Previous
+                    </button>
+
+                    <span>Page {{ page }} of {{ totalPages }}</span>
+
+                    <button
+                        class="page-button"
+                        :disabled="page >= totalPages"
+                        @click="changePage(page + 1)"
+                    >
+                        Next
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Create Work Order Modal -->
+        <div
+            v-if="showModal"
+            class="modal-overlay"
+            @click.self="closeCreateModal"
+        >
+            <div class="modal-container">
+
+                <div class="modal-header">
+                    <div>
+                        <h3>Create Work Order</h3>
+                        <p>Enter the details of the new work order.</p>
+                    </div>
+
+                    <button
+                        class="modal-close"
+                        @click="closeCreateModal"
+                        :disabled="submitting"
+                        aria-label="Close modal"
+                    >
+                        <X :size="20" />
+                    </button>
+                </div>
+
+                <form @submit.prevent="createWorkOrder">
+
+                    <div class="modal-body">
+
+                        <div class="form-group">
+                            <label for="title">
+                                Title <span>*</span>
+                            </label>
+
+                            <input
+                                id="title"
+                                v-model="form.title"
+                                type="text"
+                                maxlength="150"
+                                placeholder="Enter work order title"
+                                required
+                            />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="description">
+                                Description
+                            </label>
+
+                            <textarea
+                                id="description"
+                                v-model="form.description"
+                                maxlength="500"
+                                rows="4"
+                                placeholder="Describe the work required..."
+                            ></textarea>
+
+                            <small>
+                                {{ form.description.length }}/500 characters
+                            </small>
+                        </div>
+
+                        <div class="form-row">
+
+                            <div class="form-group">
+                                <label for="priority">
+                                    Priority <span>*</span>
+                                </label>
+
+                                <select
+                                    id="priority"
+                                    v-model="form.priority"
+                                    required
+                                >
+                                    <option value="Low">Low</option>
+                                    <option value="Medium">Medium</option>
+                                    <option value="High">High</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="branch">
+                                    Branch <span>*</span>
+                                </label>
+
+                                <select
+                                    id="branch"
+                                    v-model="form.branchId"
+                                    required
+                                    :disabled="branchesLoading"
+                                >
+                                    <option value="" disabled>
+                                        {{
+                                            branchesLoading
+                                                ? 'Loading branches...'
+                                                : 'Select branch'
+                                        }}
+                                    </option>
+
+                                    <option
+                                        v-for="branch in branches"
+                                        :key="branch.id"
+                                        :value="String(branch.id)"
+                                    >
+                                        {{ branch.name }}
+                                    </option>
+                                </select>
+                            </div>
+
+                        </div>
+
+                        <div v-if="formError" class="form-error">
+                            {{ formError }}
+                        </div>
+
+                    </div>
+
+                    <div class="modal-footer">
+                        <button
+                            type="button"
+                            class="secondary-button"
+                            @click="closeCreateModal"
+                            :disabled="submitting"
+                        >
+                            Cancel
+                        </button>
+
+                        <button
+                            type="submit"
+                            class="primary-button"
+                            :disabled="submitting || branchesLoading || branches.length === 0"
+                        >
+                            {{ submitting ? 'Creating...' : 'Create Work Order' }}
+                        </button>
+                    </div>
+
+                </form>
+            </div>
+        </div>
+
+
+        <!-- Work Order Details Modal -->
+        <div
+            v-if="detailsLoading || selectedWorkOrder || detailsError"
+            class="modal-overlay"
+            @click.self="selectedWorkOrder = null; detailsError = ''"
+        >
+            <div class="modal-container">
+
+                <div class="modal-header">
+                    <div>
+                        <h3>Work Order Details</h3>
+                        <p>View complete work order information.</p>
+                    </div>
+
+                    <button
+                        class="modal-close"
+                        @click="selectedWorkOrder = null; detailsError = ''"
+                        aria-label="Close modal"
+                    >
+                        <X :size="20" />
+                    </button>
+                </div>
+
+                <div v-if="detailsLoading" class="table-message">
+                    Loading work order details...
+                </div>
+
+                <div v-else-if="detailsError" class="modal-body">
+                    <div class="form-error">{{ detailsError }}</div>
+                </div>
+
+                <div v-else-if="selectedWorkOrder" class="modal-body">
+
+                    <div class="detail-reference">
+                        WO-{{ String(selectedWorkOrder.id).padStart(4, '0') }}
+                    </div>
+
+                    <div class="detail-group">
+                        <label>Title</label>
+                        <strong>{{ selectedWorkOrder.title }}</strong>
+                    </div>
+
+                    <div class="detail-group">
+                        <label>Description</label>
+                        <p>
+                            {{ selectedWorkOrder.description || 'No description provided.' }}
+                        </p>
+                    </div>
+
+                    <div class="detail-grid">
+
+                        <div class="detail-group">
+                            <label>Branch</label>
+                            <strong>{{ selectedWorkOrder.branchName }}</strong>
+                        </div>
+
+                        <div class="detail-group">
+                            <label>Priority</label>
+                            <span
+                                class="priority-badge"
+                                :class="priorityClass(selectedWorkOrder.priority)"
+                            >
+                                {{ selectedWorkOrder.priority }}
+                            </span>
+                        </div>
+
+                        <div class="detail-group">
+                            <label>Status</label>
+                            <span
+                                class="status-badge"
+                                :class="statusClass(selectedWorkOrder.status)"
+                            >
+                                {{ selectedWorkOrder.status }}
+                            </span>
+                        </div>
+
+                        <div class="detail-group">
+                            <label>Date Created</label>
+                            <strong>{{ formatDate(selectedWorkOrder.createdAt) }}</strong>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button
+                        class="secondary-button"
+                        @click="selectedWorkOrder = null; detailsError = ''"
+                    >
+                        Close
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</template>
