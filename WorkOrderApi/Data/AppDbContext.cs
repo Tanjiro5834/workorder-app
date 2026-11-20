@@ -7,6 +7,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<Branch> Branches => Set<Branch>();
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
+    public DbSet<IncidentReport> IncidentReports => Set<IncidentReport>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -23,6 +24,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(x => x.Title).HasMaxLength(150).IsRequired();
             e.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             e.Property(x => x.Priority).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.CreatedAt)
+                .HasConversion(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+        });
+
+        b.Entity<IncidentReport>(e =>
+        {
+            e.Property(x => x.Title).HasMaxLength(150).IsRequired();
+            e.Property(x => x.Description).HasMaxLength(500);
+            e.Property(x => x.ReportedBy).HasMaxLength(100);
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            e.Property(x => x.Severity).HasConversion<string>().HasMaxLength(20);
             e.Property(x => x.CreatedAt)
                 .HasConversion(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
         });

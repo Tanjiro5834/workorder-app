@@ -1108,3 +1108,17 @@ a {
         justify-content: space-between;
     }
 }
+
+/* Incident Report Statuses */
+
+.status-badge.investigating,
+.status-select.investigating {
+    background-color: #eff6ff;
+    color: #1d4ed8;
+}
+
+.status-badge.resolved,
+.status-select.resolved {
+    background-color: #ecfdf5;
+    color: #047857;
+}

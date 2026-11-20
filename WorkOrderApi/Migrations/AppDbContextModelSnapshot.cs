@@ -55,6 +55,50 @@ namespace WorkOrderApi.Migrations
                         });
                 });
 
+            modelBuilder.Entity("WorkOrderApi.Models.IncidentReport", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BranchId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("ReportedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BranchId");
+
+                    b.ToTable("IncidentReports");
+                });
+
             modelBuilder.Entity("WorkOrderApi.Models.WorkOrder", b =>
                 {
                     b.Property<int>("Id")
@@ -92,6 +136,17 @@ namespace WorkOrderApi.Migrations
                     b.HasIndex("BranchId");
 
                     b.ToTable("WorkOrders");
+                });
+
+            modelBuilder.Entity("WorkOrderApi.Models.IncidentReport", b =>
+                {
+                    b.HasOne("WorkOrderApi.Models.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Branch");
                 });
 
             modelBuilder.Entity("WorkOrderApi.Models.WorkOrder", b =>
