@@ -7,7 +7,8 @@ import {
     ClipboardList,
     X,
     Eye,
-    Pencil
+    Pencil,
+    Trash2
 } from 'lucide-vue-next'
 
 import { workOrderService } from '../services/workOrderService'
@@ -33,10 +34,12 @@ const loading = ref(false)
 const branchesLoading = ref(false)
 const submitting = ref(false)
 const updatingStatusId = ref<number | null>(null)
+const deleting = ref(false)
 
 const error = ref('')
 const formError = ref('')
 const statusError = ref('')
+const deleteError = ref('')
 
 const page = ref(1)
 const pageSize = 10
@@ -48,6 +51,7 @@ const search = ref('')
 const showModal = ref(false)
 const editingWorkOrderId = ref<number | null>(null)
 const selectedWorkOrder = ref<WorkOrder | null>(null)
+const workOrderToDelete = ref<WorkOrder | null>(null)
 const detailsLoading = ref(false)
 const detailsError = ref('')
 
@@ -135,7 +139,7 @@ async function updateWorkOrderStatus(id: number, newStatus: WorkOrderStatus) {
         if (selectedWorkOrder.value?.id === id) {
             selectedWorkOrder.value.status = newStatus
         }
-    } catch (err: any) {
+    } catch (err) {
         console.error('Failed to update status:', err)
         const message = 'Failed to update work order status. Please try again.'
         if (selectedWorkOrder.value?.id === id) {
@@ -161,6 +165,50 @@ function onStatusSelectChange(id: number, event: Event) {
             if (latest) select.value = latest
         }
     })
+}
+
+// Delete modal handlers
+function openDeleteModal(order: WorkOrder) {
+    deleteError.value = ''
+    workOrderToDelete.value = order
+}
+
+function closeDeleteModal() {
+    if (deleting.value) return
+    workOrderToDelete.value = null
+    deleteError.value = ''
+}
+
+async function confirmDeleteWorkOrder() {
+    if (!workOrderToDelete.value || deleting.value) return
+
+    const targetId = workOrderToDelete.value.id
+    deleting.value = true
+    deleteError.value = ''
+
+    try {
+        await workOrderService.delete(targetId)
+
+        if (selectedWorkOrder.value?.id === targetId) {
+            selectedWorkOrder.value = null
+            detailsError.value = ''
+        }
+
+        workOrderToDelete.value = null
+
+        if (workOrders.value.length === 1 && page.value > 1) {
+            page.value -= 1
+        }
+
+        await fetchWorkOrders()
+    } catch (err: any) {
+        console.error('Failed to delete work order:', err)
+        deleteError.value =
+            err.response?.data?.error ||
+            'Failed to delete work order. Please try again.'
+    } finally {
+        deleting.value = false
+    }
 }
 
 // Fetch branches
@@ -297,8 +345,15 @@ async function saveWorkOrder() {
     } catch (err: any) {
         console.error(err)
 
+        const data = err.response?.data
+        const validationMessage = data?.errors
+            ? Object.values(data.errors).flat().join(' ')
+            : null
+
         formError.value =
-            err.response?.data?.error ||
+            data?.error ||
+            validationMessage ||
+            data?.title ||
             `Failed to ${isEditing.value ? 'update' : 'create'} work order. Please try again.`
     } finally {
         submitting.value = false
@@ -481,6 +536,14 @@ onMounted(() => {
                                         @click="openEditModal(order)"
                                     >
                                         <Pencil :size="16" />
+                                    </button>
+
+                                    <button
+                                        class="icon-button danger"
+                                        title="Delete work order"
+                                        @click="openDeleteModal(order)"
+                                    >
+                                        <Trash2 :size="16" />
                                     </button>
                                 </div>
                             </td>
@@ -777,6 +840,16 @@ onMounted(() => {
                     <button
                         v-if="selectedWorkOrder"
                         type="button"
+                        class="danger-button"
+                        @click="openDeleteModal(selectedWorkOrder)"
+                    >
+                        <Trash2 :size="14" />
+                        Delete
+                    </button>
+
+                    <button
+                        v-if="selectedWorkOrder"
+                        type="button"
                         class="secondary-button"
                         @click="openEditModal(selectedWorkOrder)"
                     >
@@ -789,6 +862,68 @@ onMounted(() => {
                         @click="selectedWorkOrder = null; detailsError = ''"
                     >
                         Close
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+
+        <!-- Delete Confirmation Modal -->
+        <div
+            v-if="workOrderToDelete"
+            class="modal-overlay"
+            @click.self="closeDeleteModal"
+        >
+            <div class="modal-container">
+
+                <div class="modal-header">
+                    <div>
+                        <h3>Delete Work Order</h3>
+                        <p>This action cannot be undone.</p>
+                    </div>
+
+                    <button
+                        class="modal-close"
+                        @click="closeDeleteModal"
+                        :disabled="deleting"
+                        aria-label="Close modal"
+                    >
+                        <X :size="20" />
+                    </button>
+                </div>
+
+                <div class="modal-body">
+                    <p class="confirm-text">
+                        Are you sure you want to delete
+                        <strong>
+                            WO-{{ String(workOrderToDelete.id).padStart(4, '0') }}
+                            ({{ workOrderToDelete.title }})
+                        </strong>?
+                    </p>
+
+                    <div v-if="deleteError" class="form-error">
+                        {{ deleteError }}
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button
+                        type="button"
+                        class="secondary-button"
+                        @click="closeDeleteModal"
+                        :disabled="deleting"
+                    >
+                        Cancel
+                    </button>
+
+                    <button
+                        type="button"
+                        class="danger-button"
+                        @click="confirmDeleteWorkOrder"
+                        :disabled="deleting"
+                    >
+                        {{ deleting ? 'Deleting...' : 'Delete Work Order' }}
                     </button>
                 </div>
 
