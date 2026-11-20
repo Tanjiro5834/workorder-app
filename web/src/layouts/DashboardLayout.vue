@@ -1,10 +1,29 @@
-
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute } from 'vue-router'
 import AppSidebar from '../components/AppSidebar.vue'
 import AppHeader from '../components/AppHeader.vue'
 
+const route = useRoute()
 const sidebarOpen = ref(false)
+
+watch(() => route.fullPath, () => {
+    sidebarOpen.value = false
+})
+
+function handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape' && sidebarOpen.value) {
+        sidebarOpen.value = false
+    }
+}
+
+onMounted(() => {
+    window.addEventListener('keydown', handleKeydown)
+})
+
+onBeforeUnmount(() => {
+    window.removeEventListener('keydown', handleKeydown)
+})
 </script>
 
 <template>
