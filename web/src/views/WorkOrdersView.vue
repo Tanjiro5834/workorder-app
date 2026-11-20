@@ -1,4 +1,3 @@
-
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import {
@@ -13,11 +12,18 @@ import {
 import { workOrderService } from '../services/workOrderService'
 import type {
     WorkOrder,
+    WorkOrderStatus,
     Priority
 } from '../services/workOrderService'
 
 import { branchService } from '../services/branchService'
 import type { Branch } from '../services/branchService'
+
+const statusOptions: { value: WorkOrderStatus; label: string }[] = [
+    { value: 'Open', label: 'Open' },
+    { value: 'InProgress', label: 'In Progress' },
+    { value: 'Done', label: 'Done' }
+]
 
 const workOrders = ref<WorkOrder[]>([])
 const branches = ref<Branch[]>([])
@@ -25,9 +31,11 @@ const branches = ref<Branch[]>([])
 const loading = ref(false)
 const branchesLoading = ref(false)
 const submitting = ref(false)
+const updatingStatusId = ref<number | null>(null)
 
 const error = ref('')
 const formError = ref('')
+const statusError = ref('')
 
 const page = ref(1)
 const pageSize = 10
@@ -68,6 +76,7 @@ const filteredWorkOrders = computed(() => {
 async function fetchWorkOrders() {
     loading.value = true
     error.value = ''
+    statusError.value = ''
 
     try {
         const response = await workOrderService.getAll(
@@ -102,6 +111,53 @@ async function viewWorkOrder(id: number) {
     } finally {
         detailsLoading.value = false
     }
+}
+
+async function updateWorkOrderStatus(id: number, newStatus: WorkOrderStatus) {
+    if (updatingStatusId.value === id) return
+
+    statusError.value = ''
+    detailsError.value = ''
+    updatingStatusId.value = id
+
+    try {
+        await workOrderService.updateStatus(id, newStatus)
+
+        const existing = workOrders.value.find(o => o.id === id)
+        if (existing) {
+            existing.status = newStatus
+        }
+
+        if (selectedWorkOrder.value?.id === id) {
+            selectedWorkOrder.value.status = newStatus
+        }
+    } catch (err) {
+        console.error('Failed to update status:', err)
+        const message = 'Failed to update work order status. Please try again.'
+        if (selectedWorkOrder.value?.id === id) {
+            detailsError.value = message
+        } else {
+            statusError.value = message
+        }
+    } finally {
+        updatingStatusId.value = null
+    }
+}
+
+function onStatusSelectChange(id: number, event: Event) {
+    const select = event.target as HTMLSelectElement
+    const newStatus = select.value as WorkOrderStatus
+    const current = workOrders.value.find(o => o.id === id)?.status
+        ?? selectedWorkOrder.value?.status
+
+    updateWorkOrderStatus(id, newStatus).finally(() => {
+        // Sync DOM select value in case the request failed and state stayed reverted
+        if (current && select.value !== current) {
+            const latest = workOrders.value.find(o => o.id === id)?.status
+                ?? selectedWorkOrder.value?.status
+            if (latest) select.value = latest
+        }
+    })
 }
 
 // Fetch branches
@@ -284,6 +340,10 @@ onMounted(() => {
                 </button>
             </div>
 
+            <div v-if="statusError" style="padding: 12px 20px 0;">
+                <div class="form-error">{{ statusError }}</div>
+            </div>
+
             <div v-if="loading" class="table-message">
                 Loading work orders...
             </div>
@@ -341,12 +401,22 @@ onMounted(() => {
                             </td>
 
                             <td>
-                                <span
-                                    class="status-badge"
+                                <select
+                                    class="status-select"
                                     :class="statusClass(order.status)"
+                                    :value="order.status"
+                                    :disabled="updatingStatusId === order.id"
+                                    :aria-label="`Status for ${order.title}`"
+                                    @change="onStatusSelectChange(order.id, $event)"
                                 >
-                                    {{ order.status }}
-                                </span>
+                                    <option
+                                        v-for="opt in statusOptions"
+                                        :key="opt.value"
+                                        :value="opt.value"
+                                    >
+                                        {{ opt.label }}
+                                    </option>
+                                </select>
                             </td>
 
                             <td>{{ formatDate(order.createdAt) }}</td>
@@ -566,7 +636,7 @@ onMounted(() => {
                     Loading work order details...
                 </div>
 
-                <div v-else-if="detailsError" class="modal-body">
+                <div v-else-if="detailsError && !selectedWorkOrder" class="modal-body">
                     <div class="form-error">{{ detailsError }}</div>
                 </div>
 
@@ -607,12 +677,24 @@ onMounted(() => {
 
                         <div class="detail-group">
                             <label>Status</label>
-                            <span
-                                class="status-badge"
-                                :class="statusClass(selectedWorkOrder.status)"
-                            >
-                                {{ selectedWorkOrder.status }}
-                            </span>
+                            <div>
+                                <select
+                                    class="status-select"
+                                    :class="statusClass(selectedWorkOrder.status)"
+                                    :value="selectedWorkOrder.status"
+                                    :disabled="updatingStatusId === selectedWorkOrder.id"
+                                    aria-label="Work order status"
+                                    @change="onStatusSelectChange(selectedWorkOrder.id, $event)"
+                                >
+                                    <option
+                                        v-for="opt in statusOptions"
+                                        :key="opt.value"
+                                        :value="opt.value"
+                                    >
+                                        {{ opt.label }}
+                                    </option>
+                                </select>
+                            </div>
                         </div>
 
                         <div class="detail-group">
@@ -620,6 +702,10 @@ onMounted(() => {
                             <strong>{{ formatDate(selectedWorkOrder.createdAt) }}</strong>
                         </div>
 
+                    </div>
+
+                    <div v-if="detailsError" class="form-error">
+                        {{ detailsError }}
                     </div>
                 </div>
 

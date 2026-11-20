@@ -1,4 +1,3 @@
-
 import api from './api'
 
 export type Priority = 'Low' | 'Medium' | 'High'
@@ -23,6 +22,10 @@ export interface CreateWorkOrderRequest {
     branchId: number
 }
 
+export interface UpdateStatusRequest {
+    status: WorkOrderStatus
+}
+
 export interface PagedResult<T> {
     items: T[]
     total: number
@@ -43,6 +46,11 @@ export const workOrderService = {
 
     create(data: CreateWorkOrderRequest) {
         return api.post<WorkOrder>('/work-orders', data)
+    },
+
+    updateStatus(id: number, status: WorkOrderStatus) {
+        const payload: UpdateStatusRequest = { status }
+        return api.patch<void>(`/work-orders/${id}/status`, payload)
     },
 
     delete(id: number) {
