@@ -12,6 +12,7 @@ public interface IWorkOrderService
     Task<PagedResult<WorkOrderDto>> GetAllAsync(WorkOrderStatus? status, int page, int pageSize);
     Task<WorkOrderDto?> GetByIdAsync(int id);
     Task<WorkOrderDto?> CreateAsync(CreateWorkOrderRequest req);
+    Task<(WorkOrderDto? WorkOrder, string? Error)> UpdateAsync(int id, UpdateWorkOrderRequest request);
     Task<bool> UpdateStatusAsync(int id, WorkOrderStatus status);
     Task<bool> DeleteAsync(int id);
 }
@@ -69,6 +70,29 @@ public class WorkOrderService(AppDbContext db) : IWorkOrderService
         workOrder.Status = status;
         await db.SaveChangesAsync();
         return true;
+    }
+
+    public async Task<(WorkOrderDto? WorkOrder, string? Error)> UpdateAsync(int id, UpdateWorkOrderRequest request)
+    {
+        var workOrder = await db.WorkOrders.FindAsync(id);
+        if (workOrder is null) return (null, null);
+
+        if (!await db.Branches.AnyAsync(b => b.Id == request.BranchId))
+            return (null, "Branch not found");
+
+        workOrder.Title = request.Title.Trim();
+        workOrder.Description = string.IsNullOrWhiteSpace(request.Description)
+            ? null
+            : request.Description.Trim();
+        workOrder.Priority = request.Priority;
+        workOrder.BranchId = request.BranchId;
+
+        await db.SaveChangesAsync();
+
+        var updated = await GetByIdAsync(id)
+            ?? throw new Exception("Failed to retrieve the updated work order.");
+
+        return (updated, null);
     }
 
     public async Task<bool> DeleteAsync(int id) => await db.WorkOrders.Where(w => w.Id == id).ExecuteDeleteAsync() > 0;

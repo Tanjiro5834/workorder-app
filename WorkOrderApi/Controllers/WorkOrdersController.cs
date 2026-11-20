@@ -31,6 +31,15 @@ public class WorkOrdersController(IWorkOrderService service) : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = dto.Id }, dto);
     }
 
+    [HttpPut("{id:int}")]
+    public async Task<ActionResult<WorkOrderDto>> Update(int id, UpdateWorkOrderRequest request)
+    {
+        var (dto, error) = await service.UpdateAsync(id, request);
+        if (error is not null) return BadRequest(new { error });
+        if (dto is null) return NotFound();
+        return Ok(dto);
+    }
+
     [HttpPatch("{id:int}/status")]
     public async Task<ActionResult> UpdateStatus(int id, UpdateStatusRequest request) =>
         await service.UpdateStatusAsync(id, request.Status) ? NoContent() : NotFound();

@@ -976,3 +976,11 @@ a {
     background-color: #ecfdf5;
     color: #047857;
 }
+
+/* Table Action Group */
+
+.action-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}

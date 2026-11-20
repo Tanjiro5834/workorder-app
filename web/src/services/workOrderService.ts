@@ -22,6 +22,13 @@ export interface CreateWorkOrderRequest {
     branchId: number
 }
 
+export interface UpdateWorkOrderRequest {
+    title: string
+    description: string | null
+    priority: Priority
+    branchId: number
+}
+
 export interface UpdateStatusRequest {
     status: WorkOrderStatus
 }
@@ -46,6 +53,10 @@ export const workOrderService = {
 
     create(data: CreateWorkOrderRequest) {
         return api.post<WorkOrder>('/work-orders', data)
+    },
+
+    update(id: number, data: UpdateWorkOrderRequest) {
+        return api.put<WorkOrder>(`/work-orders/${id}`, data)
     },
 
     updateStatus(id: number, status: WorkOrderStatus) {

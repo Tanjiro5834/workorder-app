@@ -6,7 +6,8 @@ import {
     RefreshCw,
     ClipboardList,
     X,
-    Eye
+    Eye,
+    Pencil
 } from 'lucide-vue-next'
 
 import { workOrderService } from '../services/workOrderService'
@@ -45,6 +46,7 @@ const search = ref('')
 
 // Modal state
 const showModal = ref(false)
+const editingWorkOrderId = ref<number | null>(null)
 const selectedWorkOrder = ref<WorkOrder | null>(null)
 const detailsLoading = ref(false)
 const detailsError = ref('')
@@ -56,6 +58,8 @@ const form = ref({
     priority: 'Medium' as Priority,
     branchId: ''
 })
+
+const isEditing = computed(() => editingWorkOrderId.value !== null)
 
 const totalPages = computed(() =>
     Math.max(1, Math.ceil(total.value / pageSize))
@@ -131,7 +135,7 @@ async function updateWorkOrderStatus(id: number, newStatus: WorkOrderStatus) {
         if (selectedWorkOrder.value?.id === id) {
             selectedWorkOrder.value.status = newStatus
         }
-    } catch (err) {
+    } catch (err: any) {
         console.error('Failed to update status:', err)
         const message = 'Failed to update work order status. Please try again.'
         if (selectedWorkOrder.value?.id === id) {
@@ -151,7 +155,6 @@ function onStatusSelectChange(id: number, event: Event) {
         ?? selectedWorkOrder.value?.status
 
     updateWorkOrderStatus(id, newStatus).finally(() => {
-        // Sync DOM select value in case the request failed and state stayed reverted
         if (current && select.value !== current) {
             const latest = workOrders.value.find(o => o.id === id)?.status
                 ?? selectedWorkOrder.value?.status
@@ -175,8 +178,27 @@ async function fetchBranches() {
     }
 }
 
-// Open modal
+// Open create modal
 async function openCreateModal() {
+    editingWorkOrderId.value = null
+    resetForm()
+    formError.value = ''
+    showModal.value = true
+
+    if (branches.value.length === 0) {
+        await fetchBranches()
+    }
+}
+
+// Open edit modal
+async function openEditModal(order: WorkOrder) {
+    editingWorkOrderId.value = order.id
+    form.value = {
+        title: order.title,
+        description: order.description ?? '',
+        priority: order.priority,
+        branchId: String(order.branchId)
+    }
     formError.value = ''
     showModal.value = true
 
@@ -186,10 +208,11 @@ async function openCreateModal() {
 }
 
 // Close modal
-function closeCreateModal() {
+function closeFormModal() {
     if (submitting.value) return
 
     showModal.value = false
+    editingWorkOrderId.value = null
     formError.value = ''
 
     resetForm()
@@ -205,8 +228,8 @@ function resetForm() {
     }
 }
 
-// Create work order
-async function createWorkOrder() {
+// Create or update work order
+async function saveWorkOrder() {
     formError.value = ''
 
     const title = form.value.title.trim()
@@ -232,30 +255,51 @@ async function createWorkOrder() {
         return
     }
 
+    const payload = {
+        title,
+        description: description || null,
+        priority: form.value.priority,
+        branchId: Number(form.value.branchId)
+    }
+
     submitting.value = true
 
     try {
-        await workOrderService.create({
-            title,
-            description: description || null,
-            priority: form.value.priority,
-            branchId: Number(form.value.branchId)
-        })
+        if (editingWorkOrderId.value !== null) {
+            const response = await workOrderService.update(
+                editingWorkOrderId.value,
+                payload
+            )
+            const updated = response.data
 
-        showModal.value = false
-        resetForm()
+            const index = workOrders.value.findIndex(o => o.id === updated.id)
+            if (index !== -1) {
+                workOrders.value[index] = updated
+            }
 
-        // Show the newest record on the first page.
-        page.value = 1
-        await fetchWorkOrders()
+            if (selectedWorkOrder.value?.id === updated.id) {
+                selectedWorkOrder.value = updated
+            }
 
+            showModal.value = false
+            editingWorkOrderId.value = null
+            resetForm()
+        } else {
+            await workOrderService.create(payload)
+
+            showModal.value = false
+            resetForm()
+
+            // Show the newest record on the first page.
+            page.value = 1
+            await fetchWorkOrders()
+        }
     } catch (err: any) {
         console.error(err)
 
         formError.value =
             err.response?.data?.error ||
-            'Failed to create work order. Please try again.'
-
+            `Failed to ${isEditing.value ? 'update' : 'create'} work order. Please try again.`
     } finally {
         submitting.value = false
     }
@@ -422,13 +466,23 @@ onMounted(() => {
                             <td>{{ formatDate(order.createdAt) }}</td>
 
                             <td>
-                                <button
-                                    class="icon-button"
-                                    title="View details"
-                                    @click="viewWorkOrder(order.id)"
-                                >
-                                    <Eye :size="16" />
-                                </button>
+                                <div class="action-group">
+                                    <button
+                                        class="icon-button"
+                                        title="View details"
+                                        @click="viewWorkOrder(order.id)"
+                                    >
+                                        <Eye :size="16" />
+                                    </button>
+
+                                    <button
+                                        class="icon-button"
+                                        title="Edit work order"
+                                        @click="openEditModal(order)"
+                                    >
+                                        <Pencil :size="16" />
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     </tbody>
@@ -469,23 +523,29 @@ onMounted(() => {
 
         </div>
 
-        <!-- Create Work Order Modal -->
+        <!-- Create / Edit Work Order Modal -->
         <div
             v-if="showModal"
             class="modal-overlay"
-            @click.self="closeCreateModal"
+            @click.self="closeFormModal"
         >
             <div class="modal-container">
 
                 <div class="modal-header">
                     <div>
-                        <h3>Create Work Order</h3>
-                        <p>Enter the details of the new work order.</p>
+                        <h3>{{ isEditing ? 'Edit Work Order' : 'Create Work Order' }}</h3>
+                        <p>
+                            {{
+                                isEditing
+                                    ? 'Update the details of the selected work order.'
+                                    : 'Enter the details of the new work order.'
+                            }}
+                        </p>
                     </div>
 
                     <button
                         class="modal-close"
-                        @click="closeCreateModal"
+                        @click="closeFormModal"
                         :disabled="submitting"
                         aria-label="Close modal"
                     >
@@ -493,7 +553,7 @@ onMounted(() => {
                     </button>
                 </div>
 
-                <form @submit.prevent="createWorkOrder">
+                <form @submit.prevent="saveWorkOrder">
 
                     <div class="modal-body">
 
@@ -589,7 +649,7 @@ onMounted(() => {
                         <button
                             type="button"
                             class="secondary-button"
-                            @click="closeCreateModal"
+                            @click="closeFormModal"
                             :disabled="submitting"
                         >
                             Cancel
@@ -600,7 +660,11 @@ onMounted(() => {
                             class="primary-button"
                             :disabled="submitting || branchesLoading || branches.length === 0"
                         >
-                            {{ submitting ? 'Creating...' : 'Create Work Order' }}
+                            {{
+                                submitting
+                                    ? (isEditing ? 'Saving...' : 'Creating...')
+                                    : (isEditing ? 'Save Changes' : 'Create Work Order')
+                            }}
                         </button>
                     </div>
 
@@ -710,6 +774,16 @@ onMounted(() => {
                 </div>
 
                 <div class="modal-footer">
+                    <button
+                        v-if="selectedWorkOrder"
+                        type="button"
+                        class="secondary-button"
+                        @click="openEditModal(selectedWorkOrder)"
+                    >
+                        <Pencil :size="14" />
+                        Edit
+                    </button>
+
                     <button
                         class="secondary-button"
                         @click="selectedWorkOrder = null; detailsError = ''"
