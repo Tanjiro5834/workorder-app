@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import {
     Plus,
     Search,
@@ -8,7 +8,8 @@ import {
     X,
     Eye,
     Pencil,
-    Trash2
+    Trash2,
+    RotateCcw
 } from 'lucide-vue-next'
 
 import { workOrderService } from '../services/workOrderService'
@@ -27,6 +28,9 @@ const statusOptions: { value: WorkOrderStatus; label: string }[] = [
     { value: 'Done', label: 'Done' }
 ]
 
+const priorityOptions: Priority[] = ['Low', 'Medium', 'High']
+const pageSizeOptions = [10, 20, 50]
+
 const workOrders = ref<WorkOrder[]>([])
 const branches = ref<Branch[]>([])
 
@@ -42,10 +46,14 @@ const statusError = ref('')
 const deleteError = ref('')
 
 const page = ref(1)
-const pageSize = 10
+const pageSize = ref(10)
 const total = ref(0)
 
 const search = ref('')
+const statusFilter = ref<WorkOrderStatus | ''>('')
+const priorityFilter = ref<Priority | ''>('')
+
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
 // Modal state
 const showModal = ref(false)
@@ -66,19 +74,16 @@ const form = ref({
 const isEditing = computed(() => editingWorkOrderId.value !== null)
 
 const totalPages = computed(() =>
-    Math.max(1, Math.ceil(total.value / pageSize))
+    Math.max(1, Math.ceil(total.value / pageSize.value))
 )
 
-const filteredWorkOrders = computed(() => {
-    const keyword = search.value.trim().toLowerCase()
-
-    if (!keyword) return workOrders.value
-
-    return workOrders.value.filter(order =>
-        order.title.toLowerCase().includes(keyword) ||
-        order.branchName.toLowerCase().includes(keyword)
+const hasActiveFilters = computed(() =>
+    Boolean(
+        search.value.trim() ||
+        statusFilter.value ||
+        priorityFilter.value
     )
-})
+)
 
 // Fetch work orders
 async function fetchWorkOrders() {
@@ -87,10 +92,13 @@ async function fetchWorkOrders() {
     statusError.value = ''
 
     try {
-        const response = await workOrderService.getAll(
-            page.value,
-            pageSize
-        )
+        const response = await workOrderService.getAll({
+            page: page.value,
+            pageSize: pageSize.value,
+            status: statusFilter.value,
+            priority: priorityFilter.value,
+            search: search.value
+        })
 
         workOrders.value = response.data.items
         total.value = response.data.total
@@ -103,6 +111,40 @@ async function fetchWorkOrders() {
     } finally {
         loading.value = false
     }
+}
+
+watch(search, () => {
+    if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer)
+    }
+
+    searchDebounceTimer = setTimeout(() => {
+        page.value = 1
+        fetchWorkOrders()
+    }, 300)
+})
+
+function onFilterChange() {
+    page.value = 1
+    fetchWorkOrders()
+}
+
+function onPageSizeChange() {
+    page.value = 1
+    fetchWorkOrders()
+}
+
+function clearFilters() {
+    if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer)
+        searchDebounceTimer = null
+    }
+
+    search.value = ''
+    statusFilter.value = ''
+    priorityFilter.value = ''
+    page.value = 1
+    fetchWorkOrders()
 }
 
 async function viewWorkOrder(id: number) {
@@ -131,9 +173,16 @@ async function updateWorkOrderStatus(id: number, newStatus: WorkOrderStatus) {
     try {
         await workOrderService.updateStatus(id, newStatus)
 
-        const existing = workOrders.value.find(o => o.id === id)
-        if (existing) {
-            existing.status = newStatus
+        if (statusFilter.value && statusFilter.value !== newStatus) {
+            if (workOrders.value.length === 1 && page.value > 1) {
+                page.value -= 1
+            }
+            await fetchWorkOrders()
+        } else {
+            const existing = workOrders.value.find(o => o.id === id)
+            if (existing) {
+                existing.status = newStatus
+            }
         }
 
         if (selectedWorkOrder.value?.id === id) {
@@ -320,11 +369,6 @@ async function saveWorkOrder() {
             )
             const updated = response.data
 
-            const index = workOrders.value.findIndex(o => o.id === updated.id)
-            if (index !== -1) {
-                workOrders.value[index] = updated
-            }
-
             if (selectedWorkOrder.value?.id === updated.id) {
                 selectedWorkOrder.value = updated
             }
@@ -332,6 +376,8 @@ async function saveWorkOrder() {
             showModal.value = false
             editingWorkOrderId.value = null
             resetForm()
+
+            await fetchWorkOrders()
         } else {
             await workOrderService.create(payload)
 
@@ -394,6 +440,12 @@ function priorityClass(priority: string) {
 onMounted(() => {
     fetchWorkOrders()
 })
+
+onBeforeUnmount(() => {
+    if (searchDebounceTimer) {
+        clearTimeout(searchDebounceTimer)
+    }
+})
 </script>
 
 <template>
@@ -419,24 +471,72 @@ onMounted(() => {
         <div class="content-card">
 
             <div class="table-toolbar">
-                <div class="search-box">
-                    <Search :size="17" />
+                <div class="toolbar-controls">
+                    <div class="search-box">
+                        <Search :size="17" />
 
-                    <input
-                        v-model="search"
-                        type="text"
-                        placeholder="Search title or branch..."
-                    />
+                        <input
+                            v-model="search"
+                            type="text"
+                            placeholder="Search title or branch..."
+                        />
+                    </div>
+
+                    <select
+                        v-model="statusFilter"
+                        class="filter-select"
+                        aria-label="Filter by status"
+                        @change="onFilterChange"
+                    >
+                        <option value="">All Statuses</option>
+                        <option
+                            v-for="opt in statusOptions"
+                            :key="opt.value"
+                            :value="opt.value"
+                        >
+                            {{ opt.label }}
+                        </option>
+                    </select>
+
+                    <select
+                        v-model="priorityFilter"
+                        class="filter-select"
+                        aria-label="Filter by priority"
+                        @change="onFilterChange"
+                    >
+                        <option value="">All Priorities</option>
+                        <option
+                            v-for="p in priorityOptions"
+                            :key="p"
+                            :value="p"
+                        >
+                            {{ p }}
+                        </option>
+                    </select>
                 </div>
 
-                <button
-                    class="secondary-button"
-                    @click="fetchWorkOrders"
-                    :disabled="loading"
-                >
-                    <RefreshCw :size="15" />
-                    Refresh
-                </button>
+                <div class="toolbar-actions">
+                    <button
+                        v-if="hasActiveFilters"
+                        type="button"
+                        class="secondary-button"
+                        @click="clearFilters"
+                        :disabled="loading"
+                    >
+                        <RotateCcw :size="15" />
+                        Clear
+                    </button>
+
+                    <button
+                        type="button"
+                        class="secondary-button"
+                        @click="fetchWorkOrders"
+                        :disabled="loading"
+                    >
+                        <RefreshCw :size="15" />
+                        Refresh
+                    </button>
+                </div>
             </div>
 
             <div v-if="statusError" style="padding: 12px 20px 0;">
@@ -455,10 +555,31 @@ onMounted(() => {
                 </button>
             </div>
 
-            <div v-else-if="filteredWorkOrders.length === 0" class="table-message">
+            <div v-else-if="workOrders.length === 0" class="table-message">
                 <ClipboardList :size="32" />
-                <strong>No work orders found</strong>
-                <span>No records match your search.</span>
+                <template v-if="hasActiveFilters">
+                    <strong>No matching work orders</strong>
+                    <span>Try adjusting your search or filter criteria.</span>
+                    <button
+                        type="button"
+                        class="secondary-button"
+                        @click="clearFilters"
+                    >
+                        Clear Filters
+                    </button>
+                </template>
+                <template v-else>
+                    <strong>No work orders yet</strong>
+                    <span>Create your first work order to get started.</span>
+                    <button
+                        type="button"
+                        class="primary-button"
+                        @click="openCreateModal"
+                    >
+                        <Plus :size="15" />
+                        New Work Order
+                    </button>
+                </template>
             </div>
 
             <div v-else class="table-wrapper">
@@ -476,7 +597,7 @@ onMounted(() => {
 
                     <tbody>
                         <tr
-                            v-for="order in filteredWorkOrders"
+                            v-for="order in workOrders"
                             :key="order.id"
                         >
                             <td>
@@ -563,24 +684,43 @@ onMounted(() => {
                     }} of {{ total }} work orders
                 </span>
 
-                <div class="pagination">
-                    <button
-                        class="page-button"
-                        :disabled="page === 1"
-                        @click="changePage(page - 1)"
-                    >
-                        Previous
-                    </button>
+                <div class="pagination-controls">
+                    <label class="page-size-control">
+                        <span>Rows</span>
+                        <select
+                            v-model.number="pageSize"
+                            aria-label="Rows per page"
+                            @change="onPageSizeChange"
+                        >
+                            <option
+                                v-for="size in pageSizeOptions"
+                                :key="size"
+                                :value="size"
+                            >
+                                {{ size }}
+                            </option>
+                        </select>
+                    </label>
 
-                    <span>Page {{ page }} of {{ totalPages }}</span>
+                    <div class="pagination">
+                        <button
+                            class="page-button"
+                            :disabled="page === 1"
+                            @click="changePage(page - 1)"
+                        >
+                            Previous
+                        </button>
 
-                    <button
-                        class="page-button"
-                        :disabled="page >= totalPages"
-                        @click="changePage(page + 1)"
-                    >
-                        Next
-                    </button>
+                        <span>Page {{ page }} of {{ totalPages }}</span>
+
+                        <button
+                            class="page-button"
+                            :disabled="page >= totalPages"
+                            @click="changePage(page + 1)"
+                        >
+                            Next
+                        </button>
+                    </div>
                 </div>
             </div>
 

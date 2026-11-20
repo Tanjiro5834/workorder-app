@@ -12,11 +12,15 @@ public class WorkOrdersController(IWorkOrderService service) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedResult<WorkOrderDto>>> GetAll(
-         [FromQuery] WorkOrderStatus? status, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+        [FromQuery] WorkOrderStatus? status,
+        [FromQuery] Priority? priority,
+        [FromQuery] string? search,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10)
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 100);
-        return Ok(await service.GetAllAsync(status, page, pageSize));
+        return Ok(await service.GetAllAsync(status, priority, search, page, pageSize));
     }
 
     [HttpGet("{id:int}")]

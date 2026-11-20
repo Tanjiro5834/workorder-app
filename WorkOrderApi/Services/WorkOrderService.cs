@@ -9,7 +9,12 @@ namespace WorkOrderApi.Services;
 
 public interface IWorkOrderService
 {
-    Task<PagedResult<WorkOrderDto>> GetAllAsync(WorkOrderStatus? status, int page, int pageSize);
+    Task<PagedResult<WorkOrderDto>> GetAllAsync(
+        WorkOrderStatus? status,
+        Priority? priority,
+        string? search,
+        int page,
+        int pageSize);
     Task<WorkOrderDto?> GetByIdAsync(int id);
     Task<WorkOrderDto?> CreateAsync(CreateWorkOrderRequest req);
     Task<(WorkOrderDto? WorkOrder, string? Error)> UpdateAsync(int id, UpdateWorkOrderRequest request);
@@ -23,21 +28,40 @@ public class WorkOrderService(AppDbContext db) : IWorkOrderService
         new WorkOrderDto(w.Id, w.Title, w.Description, w.Status.ToString(),
             w.Priority.ToString(), w.BranchId, w.Branch.Name, w.CreatedAt);
     
-    public async Task<PagedResult<WorkOrderDto>> GetAllAsync(WorkOrderStatus? status, int page, int pageSize)
+    public async Task<PagedResult<WorkOrderDto>> GetAllAsync(
+        WorkOrderStatus? status,
+        Priority? priority,
+        string? search,
+        int page,
+        int pageSize)
     {
         var query = db.WorkOrders.AsNoTracking();
-        if(status is not null)
+
+        if (status is not null)
         {
             query = query.Where(w => w.Status == status);
         }
 
+        if (priority is not null)
+        {
+            query = query.Where(w => w.Priority == priority);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim();
+            query = query.Where(w =>
+                w.Title.Contains(term) ||
+                w.Branch.Name.Contains(term));
+        }
+
         var total = await query.CountAsync();
         var items = await query
-        .OrderByDescending(w => w.CreatedAt)
-        .Skip((page - 1) * pageSize)
-        .Take(pageSize)
-        .Select(ToDto)
-        .ToListAsync();
+            .OrderByDescending(w => w.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(ToDto)
+            .ToListAsync();
 
         return new PagedResult<WorkOrderDto>(items, total, page, pageSize);
     }

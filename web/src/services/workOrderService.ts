@@ -29,6 +29,14 @@ export interface UpdateWorkOrderRequest {
     branchId: number
 }
 
+export interface WorkOrderQueryParams {
+    page?: number
+    pageSize?: number
+    status?: WorkOrderStatus | ''
+    priority?: Priority | ''
+    search?: string
+}
+
 export interface UpdateStatusRequest {
     status: WorkOrderStatus
 }
@@ -41,9 +49,16 @@ export interface PagedResult<T> {
 }
 
 export const workOrderService = {
-    getAll(page = 1, pageSize = 10) {
+    getAll(params: WorkOrderQueryParams = {}) {
+        const {page = 1, pageSize = 10, status, priority, search} = params
         return api.get<PagedResult<WorkOrder>>('/work-orders', {
-            params: { page, pageSize }
+            params: {
+                page,
+                pageSize,
+                status: status ?? undefined,
+                priority: priority ?? undefined,
+                search: search?.trim() ?? undefined
+            }
         })
     },
 
