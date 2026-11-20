@@ -19,6 +19,8 @@ builder.Services.AddScoped<IBranchService, BranchService>();
 
 builder.Services.AddScoped<IIncidentReportService, IncidentReportService>();
 
+builder.Services.AddScoped<IDashboardService, DashboardService>();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("VueFrontend", policy =>
