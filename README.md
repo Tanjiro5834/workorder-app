@@ -1,4 +1,4 @@
-# 🛠️ Work Order App
+# 🛠️ Work Order and Incident Report System
 
 A full-stack work order and incident tracking app, built to learn **ASP.NET Core** end to end.
 
